@@ -3,8 +3,7 @@ name: PS5 Altyazi APK Derle
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -18,16 +17,27 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Android SDK
+      - name: Android SDK yolunu bul
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager bulunamadi"
+            exit 1
+          fi
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+
+      - name: Android paketlerini kur
+        run: |
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
 
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.2'
 
-      - name: Build APK
+      - name: APK derle
         working-directory: Ps5AltyaziApp
         run: gradle assembleDebug --no-daemon
 
