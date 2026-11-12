@@ -1,39 +1,58 @@
+enginkulakli
+-eviri
+Repository navigation
+Code
+Issues
+Pull requests
+Agents
+Actions
+Projects
+enginkulakli
+-eviri
+Private
+enginkulakli
+enginkulakli
+Add GitHub Actions workflow for APK build
+031ccfe
+ · 
+3 minutes ago
+Name		
+.github/workflows
+Add GitHub Actions workflow for APK build
+3 minutes ago
+Ps5AltyaziApp
+Dosyalar eklendi
+16 minutes ago
+github yükle.zip
+Add files via upload
+38 minutes ago
+Repository files navigation
+README
+Add a README
+Add a README with an overview of your project.
 
-name: PS5 Altyazi APK Derle
+About
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+ps5 remote üzerinden çeviri
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Projeyi indir
-        uses: actions/checkout@v4
-
-      - name: Java 17 kur
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Android SDK kur
-        uses: android-actions/setup-android@v3
-
-      - name: Gradle 8.2 kur
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.2'
-
-      - name: APK derle
-        working-directory: Ps5AltyaziApp
-        run: gradle assembleDebug --no-daemon
-
-      - name: APK dosyasını hazırla
-        uses: actions/upload-artifact@v4
-        with:
-          name: Ps5Altyazi-debug-apk
-          path: Ps5AltyaziApp/app/build/outputs/apk/debug/app-debug.apk
+Activity
+Stars
+0 stars
+Watchers
+0 watching
+Forks
+0 forks
+Releases
+No releases published
+Create a new release
+Packages
+No packages published
+Publish your first package
+Contributors
+1
+ (1)
+@enginkulakli
+enginkulakli
+Languages
+Kotlin
+100%
