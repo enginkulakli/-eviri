@@ -1,0 +1,43 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.ps5altyazi.overlay'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.ps5altyazi.overlay"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "0.1"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+
+    // OCR: cihaz üstünde, ücretsiz, hesap gerektirmez
+    implementation 'com.google.mlkit:text-recognition:16.0.0'
+
+    // Çeviri: cihaz üstünde, ücretsiz, model ilk kullanımda indirilir
+    implementation 'com.google.mlkit:translate:17.0.2'
+
+    // Tablet tarafında gömülü WebSocket sunucusu (TV buna bağlanıyor)
+    implementation 'org.java-websocket:Java-WebSocket:1.5.3'
+}

@@ -1,0 +1,34 @@
+name: APK derle
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: JDK 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Android SDK kur
+        uses: android-actions/setup-android@v3
+
+      - name: Gradle kur ve çalıştır (wrapper gerekmez)
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Debug APK derle
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: APK'yı yükle (Actions > bu çalıştırma > Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ps5Altyazi-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
