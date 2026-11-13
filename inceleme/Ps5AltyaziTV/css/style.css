@@ -1,0 +1,13 @@
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; color: #fff; font-family: Arial, sans-serif; }
+body { position: relative; }
+#setup { position: absolute; z-index: 20; top: 3vh; left: 3vw; width: 34vw; min-width: 520px; padding: 26px; border-radius: 18px; background: rgba(8, 12, 20, .92); border: 1px solid rgba(255,255,255,.2); }
+h1 { margin: 0 0 10px; font-size: 32px; } p { font-size: 19px; }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0; align-items: center; }
+label { font-size: 17px; } input, select { width: 100%; min-height: 44px; padding: 8px; font-size: 18px; color: #111; background: #fff; border: 0; border-radius: 6px; }
+button { min-height: 48px; padding: 10px 16px; font-size: 18px; font-weight: 700; color: #111; background: #fff; border: 0; border-radius: 7px; }
+.controls button { grid-column: 1 / -1; } button:focus, input:focus, select:focus { outline: 4px solid #39a9ff; }
+.secondary { background: #d8e5f2; }
+#subtitle { position: absolute; z-index: 10; left: 7%; right: 7%; bottom: 7%; min-height: 1px; text-align: center; color: white; font-size: 34px; line-height: 1.25; font-weight: 700; text-shadow: 2px 2px 4px #000, -2px -2px 4px #000, 0 0 12px #000; white-space: pre-wrap; }
+.panel-toggle { position: absolute; z-index: 30; top: 2%; right: 2%; min-height: 40px; opacity: .8; }
+.hidden { display: none !important; }

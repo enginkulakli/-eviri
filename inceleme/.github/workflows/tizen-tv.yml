@@ -1,0 +1,26 @@
+name: Samsung Tizen TV Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Ps5AltyaziTV/**'
+      - '.github/workflows/tizen-tv.yml'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build unsigned WGT for Apps2Samsung signing
+        run: |
+          cd Ps5AltyaziTV
+          zip -r ../Ps5AltyaziTV.wgt .
+          zip -r ../Ps5AltyaziTV-source.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ps5AltyaziTV-WGT
+          path: |
+            Ps5AltyaziTV.wgt
+            Ps5AltyaziTV-source.zip
