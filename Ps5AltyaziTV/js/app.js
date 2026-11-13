@@ -5,6 +5,57 @@
   function status(message) { byId("platformStatus").textContent = message; }
   function connection(message) { byId("connectionStatus").textContent = message; }
 
+  function registerRemoteKeys() {
+    try {
+      if (window.tizen && tizen.tvinputdevice) {
+        ["Return", "Exit"].forEach(function (key) {
+          try { tizen.tvinputdevice.registerKey(key); } catch (_) {}
+        });
+      }
+    } catch (_) {}
+  }
+
+  function focusableItems() {
+    return Array.prototype.slice.call(document.querySelectorAll(
+      '#setup button, #setup input, #setup select, #showPanel'
+    )).filter(function (el) {
+      return el.offsetWidth > 0 && el.offsetHeight > 0 && !el.disabled;
+    });
+  }
+
+  function handleRemote(event) {
+    var key = event.key || "";
+    var code = event.keyCode || event.which;
+    if (key === "ArrowDown" || key === "ArrowRight" || code === 40 || code === 39) {
+      var items = focusableItems();
+      if (!items.length) return;
+      var index = items.indexOf(document.activeElement);
+      items[(index + 1 + items.length) % items.length].focus();
+      event.preventDefault();
+    } else if (key === "ArrowUp" || key === "ArrowLeft" || code === 38 || code === 37) {
+      var itemsUp = focusableItems();
+      if (!itemsUp.length) return;
+      var indexUp = itemsUp.indexOf(document.activeElement);
+      if (indexUp < 0) indexUp = 0;
+      itemsUp[(indexUp - 1 + itemsUp.length) % itemsUp.length].focus();
+      event.preventDefault();
+    } else if (key === "Enter" || key === "Return" || code === 13) {
+      var active = document.activeElement;
+      if (active && active.tagName === "BUTTON") {
+        active.click();
+        event.preventDefault();
+      }
+    } else if (key === "Back" || key === "Escape" || code === 10009 || code === 27) {
+      if (!byId("setup").classList.contains("hidden")) {
+        byId("setup").classList.add("hidden");
+      } else {
+        byId("setup").classList.remove("hidden");
+        byId("showPanel").focus();
+      }
+      event.preventDefault();
+    }
+  }
+
   function loadSources() {
     if (!window.tizen || !tizen.systeminfo || !tizen.tvwindow) { status("Bu TV'de Samsung TVWindow API bulunamadı."); return; }
     try {
@@ -50,11 +101,14 @@
   }
 
   function init() {
+    registerRemoteKeys();
+    document.addEventListener("keydown", handleRemote, true);
     byId("startHdmi").addEventListener("click", startHdmi);
     byId("connect").addEventListener("click", connectTablet);
-    byId("hidePanel").addEventListener("click", function () { byId("setup").classList.add("hidden"); });
-    byId("showPanel").addEventListener("click", function () { byId("setup").classList.remove("hidden"); });
+    byId("hidePanel").addEventListener("click", function () { byId("setup").classList.add("hidden"); byId("showPanel").focus(); });
+    byId("showPanel").addEventListener("click", function () { byId("setup").classList.remove("hidden"); byId("hdmiSelect").focus(); });
     loadSources();
+    window.setTimeout(function () { byId("hdmiSelect").focus(); }, 300);
   }
   document.addEventListener("visibilitychange", function () { if (!document.hidden && !hdmiSources.length) loadSources(); });
   window.addEventListener("load", init);
