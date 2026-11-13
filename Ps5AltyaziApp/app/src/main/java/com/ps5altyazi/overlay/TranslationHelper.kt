@@ -36,11 +36,14 @@ class TranslationHelper(
     }
 
     fun processFrame(bitmap: Bitmap) {
-        val image = InputImage.fromBitmap(bitmap, 0)
+        // OCR asenkron çalıştığı için servis karesini hemen serbest bırakabilir;
+        // OCR için bağımsız bir kopya kullanıp işlem bitince onu serbest bırakıyoruz.
+        val frame = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val image = InputImage.fromBitmap(frame, 0)
         recognizer.process(image)
             .addOnSuccessListener { visionText ->
                 // Sadece görüntünün alt kısmındaki (altyazı bölgesi) metinleri al
-                val height = bitmap.height
+                val height = frame.height
                 val subtitleLines = visionText.textBlocks
                     .filter { it.boundingBox != null && it.boundingBox!!.top > height * 0.72 }
                     .joinToString(" ") { it.text }
@@ -67,6 +70,7 @@ class TranslationHelper(
                     .addOnFailureListener { onLog("Çeviri hatası: ${it.message}") }
             }
             .addOnFailureListener { onLog("OCR hatası: ${it.message}") }
+            .addOnCompleteListener { frame.recycle() }
     }
 
     fun close() {
