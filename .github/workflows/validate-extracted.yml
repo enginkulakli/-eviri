@@ -1,0 +1,44 @@
+name: İnceleme APK Derle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'inceleme/Ps5AltyaziApp/**'
+      - '.github/workflows/validate-extracted.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Android SDK paketlerini kur
+        run: |
+          yes | sdkmanager --licenses || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2'
+
+      - name: İnceleme sürümünü derle
+        working-directory: inceleme/Ps5AltyaziApp
+        run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: Ps5Altyazi-inceleme-debug-apk
+          path: inceleme/Ps5AltyaziApp/app/build/outputs/apk/debug/app-debug.apk
