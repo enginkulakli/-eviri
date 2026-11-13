@@ -4,6 +4,8 @@ name: PS5 Altyazi APK Derle
 on:
   push:
     branches: [main]
+    paths:
+      - 'Ps5AltyaziApp/**'
   workflow_dispatch:
 
 jobs:
