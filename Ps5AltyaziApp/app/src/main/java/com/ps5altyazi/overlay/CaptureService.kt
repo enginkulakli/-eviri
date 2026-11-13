@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
 import android.media.projection.MediaProjection
@@ -28,7 +27,6 @@ class CaptureService : Service() {
         const val NOTIF_ID = 42
         const val FRAME_INTERVAL_MS = 800L
 
-        // MainActivity bu callback'leri dinleyerek ekranı günceller
         var onStatus: ((String) -> Unit)? = null
         var onSubtitle: ((String) -> Unit)? = null
     }
@@ -43,10 +41,23 @@ class CaptureService : Service() {
     private var screenHeight = 0
     private var screenDensity = 0
 
+    private val projectionCallback = object : MediaProjection.Callback() {
+        override fun onStop() {
+            log("Ekran paylaşımı durduruldu")
+            handler.removeCallbacks(frameLoop)
+            virtualDisplay?.release()
+            virtualDisplay = null
+            imageReader?.close()
+            imageReader = null
+            stopSelf()
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity_RESULT_CANCELED) ?: Activity_RESULT_CANCELED
+        val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity_RESULT_CANCELED)
+            ?: Activity_RESULT_CANCELED
         val resultData: Intent? = intent?.getParcelableExtra(EXTRA_RESULT_DATA)
         val port = intent?.getIntExtra(EXTRA_PORT, 8787) ?: 8787
 
@@ -58,24 +69,34 @@ class CaptureService : Service() {
             return START_NOT_STICKY
         }
 
-        val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = mgr.getMediaProjection(resultCode, resultData)
+        try {
+            val mgr = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mediaProjection = mgr.getMediaProjection(resultCode, resultData)
 
-        wsHub = WsHub(port) { msg -> log(msg) }
-        wsHub?.start()
+            // Android 14+ createVirtualDisplay öncesinde callback kaydı zorunludur.
+            mediaProjection?.registerCallback(projectionCallback, handler)
 
-        helper = TranslationHelper(
-            onResult = { translated ->
-                onSubtitle?.invoke(translated)
-                wsHub?.broadcastText(translated)
-            },
-            onLog = { msg -> log(msg) }
-        )
+            wsHub = WsHub(port) { msg -> log(msg) }
+            wsHub?.start()
 
-        setupVirtualDisplay()
-        handler.post(frameLoop)
-        log("Yakalama başladı")
-        return START_STICKY
+            helper = TranslationHelper(
+                onResult = { translated ->
+                    onSubtitle?.invoke(translated)
+                    wsHub?.broadcastText(translated)
+                },
+                onLog = { msg -> log(msg) }
+            )
+
+            setupVirtualDisplay()
+            handler.post(frameLoop)
+            log("Yakalama başladı")
+        } catch (e: Exception) {
+            log("Başlatma hatası: ${e.javaClass.simpleName}: ${e.message}")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        return START_NOT_STICKY
     }
 
     private val frameLoop = object : Runnable {
@@ -122,6 +143,8 @@ class CaptureService : Service() {
             bitmap.copyPixelsFromBuffer(buffer)
             val cropped = Bitmap.createBitmap(bitmap, 0, 0, screenWidth, screenHeight)
             helper?.processFrame(cropped)
+            cropped.recycle()
+            bitmap.recycle()
         } catch (e: Exception) {
             log("Kare okuma hatası: ${e.message}")
         } finally {
@@ -149,6 +172,7 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacks(frameLoop)
+        mediaProjection?.unregisterCallback(projectionCallback)
         virtualDisplay?.release()
         imageReader?.close()
         mediaProjection?.stop()
@@ -158,5 +182,4 @@ class CaptureService : Service() {
     }
 }
 
-// MediaProjection izni reddedilirse kıyaslamak için küçük bir sabit
 private const val Activity_RESULT_CANCELED = 0
