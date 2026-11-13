@@ -1,0 +1,23 @@
+name: Samsung Tizen TV Source Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Ps5AltyaziTV/**'
+      - '.github/workflows/tizen-tv.yml'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package Tizen project
+        run: |
+          cd Ps5AltyaziTV
+          zip -r ../Ps5AltyaziTV-source.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ps5AltyaziTV-source
+          path: Ps5AltyaziTV-source.zip
