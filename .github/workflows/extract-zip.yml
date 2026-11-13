@@ -1,0 +1,33 @@
+name: ZIP Dosyasını Ayıkla
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu indir
+        uses: actions/checkout@v4
+
+      - name: ZIP dosyasını ayrı klasöre çıkar
+        run: |
+          test -f ps5altyazi-adim1.zip
+          rm -rf inceleme
+          mkdir -p inceleme
+          unzip -q ps5altyazi-adim1.zip -d inceleme
+
+      - name: Çıkarılan dosyaları depoya kaydet
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add inceleme
+          if git diff --cached --quiet; then
+            echo "Yeni değişiklik yok."
+          else
+            git commit -m "ZIP içeriğini inceleme klasörüne çıkar"
+            git push
+          fi
