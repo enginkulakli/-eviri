@@ -28,7 +28,7 @@
       tizen.tvwindow.setSource(source, function () {
         tizen.tvwindow.show(function () { status("HDMI " + number + " görüntüsü uygulamaya alındı."); },
           function (error) { status("HDMI görüntüsü açılamadı: " + error.message); },
-          ["0px", "0px", "1920px", "1080px"], "MAIN", "BEHIND");
+          ["0%", "0%", "100%", "100%"], "MAIN", "BEHIND");
       }, function (error) { status("HDMI kaynağı seçilemedi: " + error.message); }, "MAIN");
     } catch (error) { status("TVWindow hatası: " + error.message); }
   }
