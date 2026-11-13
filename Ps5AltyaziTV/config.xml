@@ -4,7 +4,7 @@
   <description>PS5 HDMI görüntüsünü TVWindow ile gösterir ve çevrilen altyazıyı üst katmanda sunar.</description>
   <feature name="http://tizen.org/feature/screen.size.normal"/>
   <feature name="http://tizen.org/feature/tv.pip"/>
-  <tizen:application id="org.ps5altyazi.tv.Ps5AltyaziTV" package="org.ps5altyazi.tv" required_version="4.0"/>
+  <tizen:application id="Ps5AltYazi.Ps5AltyaziTV" package="Ps5AltYazi" required_version="4.0"/>
   <tizen:profile name="tv-samsung"/>
   <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
