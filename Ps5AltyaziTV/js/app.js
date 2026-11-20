@@ -66,6 +66,7 @@
           var option = document.createElement("option"); option.value = String(source.number);
           option.textContent = "HDMI " + source.number; select.appendChild(option);
         });
+        if (hdmiSources.length) window.setTimeout(startHdmi, 500);
         status(hdmiSources.length ? "TVWindow hazır. " + hdmiSources.length + " HDMI girişi bulundu." : "Bağlı HDMI bulunamadı. PS5 açık ve TV'ye bağlı olsun.");
       }, function (error) { status("HDMI girişleri okunamadı: " + error.message); });
     } catch (error) { status("TVWindow başlatma hatası: " + error.message); }
@@ -76,7 +77,9 @@
     var source = hdmiSources.filter(function (item) { return item.number === number; })[0];
     if (!source) { status("Önce geçerli bir HDMI girişi seç."); return; }
     try {
+      status("HDMI " + number + " seçiliyor…");
       tizen.tvwindow.setSource(source, function () {
+        status("HDMI görüntü katmanı açılıyor…");
         tizen.tvwindow.show(function () { status("HDMI " + number + " görüntüsü uygulamaya alındı."); },
           function (error) { status("HDMI görüntüsü açılamadı: " + error.message); },
           ["0%", "0%", "100%", "100%"], "MAIN", "BEHIND");
