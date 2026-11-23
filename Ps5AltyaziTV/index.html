@@ -5,6 +5,14 @@
     <h1>PS5 Altyazı</h1><p id="platformStatus">TVWindow başlatılıyor…</p>
     <div class="controls"><label for="hdmiSelect">PS5'in bağlı olduğu HDMI</label><select id="hdmiSelect"></select><button id="startHdmi">HDMI görüntüsünü göster</button></div>
     <div class="controls"><label for="tabletIp">Tablet IP adresi</label><input id="tabletIp" type="text" value="192.168.1.8"><label for="tabletPort">Port</label><input id="tabletPort" type="number" value="8787"><button id="connect">Tablete bağlan</button></div>
+    <div class="controls">
+      <label for="subtitleSize">Altyazı boyutu</label>
+      <select id="subtitleSize"><option value="26">Küçük</option><option value="34" selected>Orta</option><option value="46">Büyük</option><option value="58">Çok büyük</option></select>
+      <label for="subtitlePosition">Altyazı konumu</label>
+      <select id="subtitlePosition"><option value="4">En alt</option><option value="7" selected>Alt</option><option value="15">Yükseltilmiş</option><option value="82">Üst</option></select>
+      <label for="subtitleStyle">Altyazı görünümü</label>
+      <select id="subtitleStyle"><option value="outline">Beyaz ve gölgeli</option><option value="backplate">Beyaz ve koyu zemin</option><option value="yellow">Sarı ve gölgeli</option></select>
+    </div>
     <p id="connectionStatus">Bağlantı bekleniyor</p><button id="hidePanel" class="secondary">Paneli gizle</button>
   </main>
   <button id="showPanel" class="panel-toggle">Ayarlar</button><section id="subtitle" aria-live="polite"></section>
