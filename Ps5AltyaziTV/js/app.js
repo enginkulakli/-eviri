@@ -157,6 +157,7 @@
       if (socket !== current) return;
       clearSubtitle();
       connection("Bağlantı hatası. Tablet uygulamasını ve portu kontrol et.");
+      try { current.close(); } catch (_) {}
     };
     current.onclose = function () {
       if (socket !== current) return;
@@ -185,7 +186,7 @@
   }
 
   function connectTablet() {
-    var ip = byId("tabletIp").value.trim(), port = Number(byId("tabletPort").value);
+    var ip = byId("tabletIp").value.trim(), port = Number(byId("tabletPort").value.trim() || "8787");
     var parts = ip.split(".");
     if (parts.length !== 4 || !parts.every(function (part) { return /^\d{1,3}$/.test(part) && Number(part) <= 255; })) {
       connection("Geçerli bir tablet IPv4 adresi gir.");
