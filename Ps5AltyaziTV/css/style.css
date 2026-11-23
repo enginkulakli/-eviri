@@ -17,3 +17,7 @@ button { min-height: 48px; padding: 10px 16px; font-size: 18px; font-weight: 700
 #subtitle.backplate { background: rgba(0, 0, 0, .75); padding: 0.15em; }
 #subtitle.yellow { color: #ffea55; }
 #subtitle:empty { display: none; }
+#textOverlay { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 11; pointer-events: none; overflow: hidden; }
+.text-box { position: absolute; padding: 0.16em 0.3em; font-weight: 700; line-height: 1.2; text-align: center; overflow: hidden; word-wrap: break-word; text-shadow: 1px 1px 3px #000, -1px -1px 3px #000, 0 0 7px #000; }
+.text-box.backplate { background: rgba(0, 0, 0, .78); border-radius: 0.2em; }
+.text-box.yellow { color: #ffea55; }

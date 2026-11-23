@@ -2,7 +2,7 @@
   "use strict";
   var socket = null, hdmiSources = [], subtitleTimer = null;
   var retryTimer = null, retryDelay = 1000, endpoint = null;
-  var preferences = { subtitleSize: "34", subtitlePosition: "7", subtitleStyle: "outline" };
+  var preferences = { subtitleSize: "34", subtitlePosition: "7", subtitleStyle: "outline", overlayFit: "contain" };
   function byId(id) { return document.getElementById(id); }
   function status(message) { byId("platformStatus").textContent = message; }
   function connection(message) { byId("connectionStatus").textContent = message; }
@@ -109,6 +109,10 @@
 
   function handleSubtitle(data) {
     if (!data) return;
+    if (data.type === "overlay") {
+      if (overlay.update(data)) clearSubtitle();
+      return;
+    }
     if (data.type === "refresh") {
       if (!byId("subtitle").textContent) return;
     } else {
@@ -147,7 +151,7 @@
       retryDelay = 1000;
       connection("Tablete bağlandı.");
       // Legacy tablet servers ignore incoming messages.
-      current.send('{"type":"hello","subtitleVersion":2}');
+      current.send('{"type":"hello","subtitleVersion":3}');
     };
     current.onmessage = function (event) {
       if (socket !== current || document.hidden) return;
@@ -156,6 +160,7 @@
     current.onerror = function () {
       if (socket !== current) return;
       clearSubtitle();
+      overlay.clear();
       connection("Bağlantı hatası. Tablet uygulamasını ve portu kontrol et.");
       try { current.close(); } catch (_) {}
     };
@@ -163,6 +168,7 @@
       if (socket !== current) return;
       socket = null;
       clearSubtitle();
+      overlay.clear();
       connection("Bağlantı kesildi. Yeniden bağlanılıyor…");
       retryConnection();
     };
@@ -175,6 +181,7 @@
     socket = null;
     if (previous) { try { previous.close(); } catch (_) {} }
     clearSubtitle();
+    overlay.clear();
   }
 
   function savePreference(key, value) {
@@ -206,9 +213,14 @@
     subtitle.style.fontSize = byId("subtitleSize").value + "px";
     subtitle.style.bottom = byId("subtitlePosition").value + "%";
     subtitle.className = byId("subtitleStyle").value;
+    overlay.appearance(Number(byId("subtitleSize").value), byId("subtitleStyle").value, byId("overlayFit").value);
   }
 
+  var overlay;
+
   function init() {
+    overlay = new Ps5TextOverlay(byId("textOverlay"), window);
+    window.addEventListener("resize", function () { overlay.layout(); });
     registerRemoteKeys();
     document.addEventListener("keydown", handleRemote, true);
     byId("startHdmi").addEventListener("click", startHdmi);
