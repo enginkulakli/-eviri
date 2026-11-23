@@ -2,9 +2,10 @@ name: Samsung Tizen TV Package
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/v2-fullscreen-translation]
     paths:
       - 'Ps5AltyaziTV/**'
+      - 'tests/translation.test.cjs'
       - '.github/workflows/tizen-tv.yml'
   workflow_dispatch:
 
@@ -13,6 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test HDMI and translation message handling
+        run: node --test tests/translation.test.cjs
       - name: Build unsigned WGT for Apps2Samsung signing
         run: |
           cd Ps5AltyaziTV

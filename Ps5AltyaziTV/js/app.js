@@ -151,6 +151,7 @@
       retryDelay = 1000;
       connection("Tablete bağlandı.");
       // Legacy tablet servers ignore incoming messages.
+      current.send('{"type":"hello","subtitleVersion":2}');
       current.send('{"type":"hello","subtitleVersion":3}');
     };
     current.onmessage = function (event) {
@@ -219,7 +220,7 @@
   var overlay;
 
   function init() {
-    overlay = new Ps5TextOverlay(byId("textOverlay"), window);
+    overlay = new window.Ps5TextOverlay(byId("textOverlay"), window);
     window.addEventListener("resize", function () { overlay.layout(); });
     registerRemoteKeys();
     document.addEventListener("keydown", handleRemote, true);

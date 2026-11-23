@@ -19,11 +19,13 @@
 
     function layoutBox(box, area) {
       var element = box.element, bounds = box.bounds;
-      var width = Math.min(area.w, Math.max(bounds.w * area.w, size * 5));
+      var fontSize = Math.max(16, size * 0.72);
+      var readableWidth = Math.max(5, Math.min(24, element.textContent.length)) * fontSize * 0.55 + fontSize;
+      var width = Math.min(area.w, Math.max(bounds.w * area.w, readableWidth));
       var centerX = area.x + (bounds.x + bounds.w / 2) * area.w;
       var top = area.y + bounds.y * area.h;
       element.className = "text-box " + style;
-      element.style.fontSize = Math.max(16, size * 0.72) + "px";
+      element.style.fontSize = fontSize + "px";
       element.style.width = width + "px";
       element.style.maxHeight = area.h + "px";
       element.style.left = clamp(centerX - width / 2, area.x, area.x + area.w - width) + "px";
