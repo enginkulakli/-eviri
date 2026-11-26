@@ -52,13 +52,20 @@
 
   function readNetwork(done) {
     var system = root.tizen && root.tizen.systeminfo;
-    if (!system) return done(null);
     var kinds = ["ETHERNET_NETWORK", "WIFI_NETWORK"];
-    function next() {
-      if (!kinds.length) return done(null);
+    function configuredNetwork() {
       try {
-        system.getPropertyValue(kinds.shift(), function (value) {
-          if (value && privateIp(numberIp(value.ipAddress)) && numberIp(value.subnetMask) !== null) done(value);
+        var samsung = root.webapis.network;
+        return done({ ipAddress: samsung.getIp(), subnetMask: samsung.getSubnetMask() });
+      } catch (_) { done(null); }
+    }
+    function next() {
+      if (!system || !kinds.length) return configuredNetwork();
+      var kind = kinds.shift();
+      try {
+        system.getPropertyValue(kind, function (value) {
+          var active = value && (value.status === "ON" || value.status === "CONNECTED" || !value.status);
+          if (active && targets(value.ipAddress, value.subnetMask, "").length) done(value);
           else next();
         }, next);
       } catch (_) { next(); }
@@ -101,10 +108,14 @@
       options.status(enroll ? "TV " + deviceId.slice(0, 6).toUpperCase() + " · Kod " + code : "Eşleştirilmiş cihaz aranıyor…");
       readNetwork(function (network) {
         if (active !== run) return;
-        var ips = network ? targets(network.ipAddress, network.subnetMask, options.read("tabletIp")) : [];
+        var last = options.read("tabletIp");
+        var ips = network ? targets(network.ipAddress, network.subnetMask, last) : [];
+        // When the TV network API is unavailable, authenticate the previous address
+        // as a hint; never open the subtitle socket based on this hint alone.
+        if (!ips.length && privateIp(numberIp(last))) ips.push(last);
         function pump() {
           if (run !== active) return;
-          while (run.pending < 24 && run.next < ips.length && run === active) probe(ips[run.next++]);
+          while (run.pending < 16 && run.next < ips.length && run === active) probe(ips[run.next++]);
           if (run.pending === 0 && run === active) {
             stop();
             options.status("Otomatik bağlantı bulunamadı. Çeviri sunucusunu kontrol edin veya IP ve portu elle girin.");
@@ -128,11 +139,14 @@
             if (active === run) root.setTimeout(pump, 0);
           }
           run.probes.push(finish);
-          timer = root.setTimeout(finish, 750);
+          timer = root.setTimeout(finish, 2000);
           socket.onclose = socket.onerror = finish;
           socket.onopen = function () {
             if (run !== active) return finish();
-            socket.send(JSON.stringify({ type: "discover", version: 1, tvId: deviceId, nonce: nonce, pair: enroll }));
+            root.clearTimeout(timer);
+            timer = root.setTimeout(finish, 2000);
+            try { socket.send(JSON.stringify({ type: "discover", version: 1, tvId: deviceId, nonce: nonce, pair: enroll })); }
+            catch (_) { finish(); }
           };
           socket.onmessage = function (event) {
             if (run !== active || typeof event.data !== "string" || event.data.length > 1024) return finish();
@@ -154,7 +168,8 @@
                   port % 1 !== 0 || port < 1024 || port > 65535) return finish();
               exchange = [serverId, deviceId, nonce, message.nonce, host, port].join("|");
               if (!matches(message.proof, sign(key, "server", exchange))) return finish();
-              socket.send(JSON.stringify({ type: "authenticate", proof: sign(key, "tv", exchange) }));
+              try { socket.send(JSON.stringify({ type: "authenticate", proof: sign(key, "tv", exchange) })); }
+              catch (_) { finish(); }
               return;
             }
             if (message.type === "accepted" && exchange && matches(message.proof, sign(key, "accepted", exchange))) {

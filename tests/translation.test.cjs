@@ -6,12 +6,15 @@ const path = require("node:path");
 
 const read = (name) => fs.readFileSync(path.join(__dirname, "../Ps5AltyaziTV/js", name), "utf8");
 
-function setup() {
+function setup({ paired = false, autoManual = true } = {}) {
   const callbacks = new Map();
   const nodes = new Map();
   const timers = new Map();
   const sockets = [];
   const hdmi = [];
+  const preferences = new Map(paired ? [["tabletIp", "192.168.1.15"], ["tabletPort", "8787"], ["deviceDiscoveryAuto", "0"]] : []);
+  const searches = [];
+  let found = null;
   let now = 0;
   let timerId = 0;
   const node = (id) => {
@@ -46,16 +49,22 @@ function setup() {
     tizen,
     setTimeout(fn, ms) { timers.set(++timerId, { fn, at: now + ms }); return timerId; },
     clearTimeout(id) { timers.delete(id); },
-    localStorage: { getItem() {}, setItem() {} },
+    localStorage: { getItem: (key) => preferences.get(key), setItem: (key, value) => preferences.set(key, value) },
     addEventListener: (event, fn) => callbacks.set(event, fn),
   };
-  function WebSocket() {
+  if (paired) window.Ps5DeviceDiscovery = function (options) {
+    this.saved = () => true;
+    this.stop = () => {};
+    this.search = (enroll) => { searches.push(enroll); found = options.connected; return true; };
+  };
+  function WebSocket(url) {
+    this.url = url;
     this.sent = [];
     this.send = (message) => this.sent.push(JSON.parse(message));
     this.close = () => { this.closed = true; };
     sockets.push(this);
   }
-  const context = vm.createContext({ tizen, window, document, WebSocket });
+  const context = vm.createContext({ tizen, window, document, WebSocket, Date: {now: () => now} });
   vm.runInContext(read("text-overlay.js"), context);
   vm.runInContext(read("app.js"), context);
   callbacks.get("load")();
@@ -70,13 +79,16 @@ function setup() {
     }
     now = limit;
   }
-  node("tabletIp").value = "192.168.1.10";
-  node("tabletPort").value = "8787";
-  callbacks.get("connect:click")();
+  if (autoManual) {
+    node("tabletIp").value = "192.168.1.10";
+    node("tabletPort").value = "8787";
+    callbacks.get("connect:click")();
+    sockets[0].onopen();
+  }
   const socket = sockets[0];
-  socket.onopen();
-  const receive = (message) => socket.onmessage({ data: JSON.stringify(message) });
-  return { node, document, callbacks, advance, socket, receive, hdmi };
+  const receive = (message, target = socket) => target.onmessage({ data: JSON.stringify(message) });
+  return { node, document, callbacks, advance, socket, sockets, receive, hdmi, preferences, searches,
+    authenticate: (ip, port) => found(ip, port) };
 }
 
 const block = (id, x, y, ttlMs) => ({ id, x, y, ttlMs, text: "Metin " + id, w: .1, h: .1 });
@@ -146,7 +158,11 @@ test("maps source aspect ratio, fits edges, and keeps boxes on a resize", () => 
 
 test("remote shows settings without opening the keyboard and Back closes editing first", () => {
   const app = setup();
-  const press = (keyCode) => app.callbacks.get("keydown")({keyCode, preventDefault() {}});
+  const press = (keyCode) => {
+    const event = {keyCode, preventDefault() {}};
+    app.callbacks.get("keydown")(event);
+    app.callbacks.get("keyup")(event);
+  };
   assert(app.node("showPanel").classList.contains("hidden"));
   press(10009);
   assert.equal(app.document.activeElement, app.node("hdmiSelect"));
@@ -180,4 +196,70 @@ test("relayout uses real element height and avoids overlapping phone captions", 
   assert.equal(layer.children[0], a);
   assert.equal(layer.children[1], b);
   assert.equal(parseFloat(b.style.top), topB);
+});
+
+test("held Back is consumed once and a reconnect leaves explicitly opened settings visible", () => {
+  const app = setup();
+  let consumed = 0;
+  const key = {keyCode: 10009, preventDefault() {}, stopImmediatePropagation() { consumed++; }};
+  app.socket.onerror();
+  app.callbacks.get("keydown")(key);
+  app.callbacks.get("keydown")({...key, repeat: true});
+  app.callbacks.get("keydown")(key);
+  assert.equal(app.node("setup").classList.contains("hidden"), false);
+  assert.equal(consumed, 3);
+  app.advance(1000);
+  const replacement = app.sockets[1];
+  replacement.onopen();
+  assert.equal(app.node("setup").classList.contains("hidden"), false);
+  app.callbacks.get("keyup")(key);
+  app.callbacks.get("keydown")(key);
+  assert.equal(app.node("setup").classList.contains("hidden"), true);
+});
+
+test("dense translations stay visible and have non-intersecting rectangles", () => {
+  const app = setup();
+  const layer = app.node("textOverlay");
+  app.receive(message(Array.from({length: 6}, (_, i) => ({ ...block(String(i), .35, .4, 1500), text: "Görünen ileti " + i }))));
+  assert.equal(layer.children.length, 6);
+  const bounds = layer.children.map(box => {
+    assert.equal(box.style.visibility, "visible");
+    return {x: parseFloat(box.style.left), y: parseFloat(box.style.top), w: parseFloat(box.style.width), h: box.offsetHeight};
+  });
+  bounds.forEach((a, i) => bounds.slice(i + 1).forEach(b => {
+    assert(a.x + a.w <= b.x + .01 || b.x + b.w <= a.x + .01 || a.y + a.h <= b.y + .01 || b.y + b.h <= a.y + .01);
+  }));
+});
+
+test("migrates the old manual flag, retries authenticated discovery and saves the new IP", () => {
+  const app = setup({paired: true, autoManual: false});
+  assert.deepEqual(app.searches, [false]);
+  assert.equal(app.sockets.length, 0);
+  app.authenticate("192.168.1.20", 8787);
+  assert.equal(app.sockets[0].url, "ws://192.168.1.20:8787");
+  app.sockets[0].onopen();
+  app.sockets[0].onclose();
+  app.advance(1000);
+  assert.deepEqual(app.searches, [false, false]);
+  assert.equal(app.sockets.length, 1);
+  app.authenticate("192.168.1.25", 9100);
+  assert.equal(app.sockets[1].url, "ws://192.168.1.25:9100");
+  assert.equal(app.preferences.get("tabletIp"), "192.168.1.25");
+  assert.equal(app.preferences.get("tabletPort"), "9100");
+  app.callbacks.get("connect:click")();
+  app.advance(6000);
+  assert.deepEqual(app.searches, [false, false, false]);
+});
+
+test("a half-open connection with negotiated pong returns to discovery", () => {
+  const app = setup({paired: true, autoManual: false});
+  app.authenticate("192.168.1.20", 8787);
+  const live = app.sockets[0];
+  live.onopen();
+  app.advance(5000);
+  assert.equal(live.sent.at(-1).type, "ping");
+  app.receive({type: "pong"}, live);
+  app.advance(16000);
+  assert(live.closed);
+  assert.deepEqual(app.searches, [false, false]);
 });

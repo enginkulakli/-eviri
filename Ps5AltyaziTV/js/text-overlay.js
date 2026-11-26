@@ -8,6 +8,7 @@
     var boxes = Object.create(null);
     var frameWidth = 16, frameHeight = 9;
     var size = 34, style = "outline", fit = "contain";
+    var counts = { moved: 0, smaller: 0, grid: false };
 
     function remove(id) {
       var box = boxes[id];
@@ -17,11 +18,10 @@
       delete boxes[id];
     }
 
-    function layoutBox(box, area) {
+    function measure(box, area, fontSize, widthHint) {
       var element = box.element, bounds = box.bounds;
-      var fontSize = Math.max(16, size * 0.72);
       var readableWidth = Math.max(5, Math.min(24, element.textContent.length)) * fontSize * 0.55 + fontSize;
-      var width = Math.min(area.w, Math.max(bounds.w * area.w, readableWidth));
+      var width = Math.min(area.w, Math.max(widthHint, readableWidth));
       var centerX = area.x + (bounds.x + bounds.w / 2) * area.w;
       var top = area.y + bounds.y * area.h;
       element.className = "text-box " + style;
@@ -45,39 +45,85 @@
       return {x: (width - w) / 2, y: (height - h) / 2, w: w, h: h};
     }
 
+    function position(rect, area, placed, nearby) {
+      var gap = 2;
+      var xs = [rect.x], ys = [rect.y];
+      placed.forEach(function (other) {
+        if (!nearby) xs.push(other.x - rect.w - gap, other.x + other.w + gap);
+        if (!nearby || (other.x < rect.x + rect.w + gap && other.x + other.w + gap > rect.x)) {
+          ys.push(other.y - rect.h - gap, other.y + other.h + gap);
+        }
+      });
+      if (!nearby) {
+        xs.push(area.x, area.x + area.w - rect.w);
+        ys.push(area.y, area.y + area.h - rect.h);
+      }
+      var best = null, score = Infinity;
+      xs.forEach(function (x) {
+        if (x < area.x - .01 || x + rect.w > area.x + area.w + .01) return;
+        ys.forEach(function (y) {
+          if ((nearby && Math.abs(y - rect.y) > area.h * .04) || y < area.y - .01 || y + rect.h > area.y + area.h + .01) return;
+          var distance = Math.abs(y - rect.y) + Math.abs(x - rect.x) * 1.3;
+          if (distance >= score) return;
+          var blocked = placed.some(function (other) {
+            return x < other.x + other.w + gap - .01 && x + rect.w + gap > other.x + .01 &&
+              y < other.y + other.h + gap - .01 && y + rect.h + gap > other.y + .01;
+          });
+          if (!blocked) { best = { x: x, y: y }; score = distance; }
+        });
+      });
+      return best;
+    }
+
     function layout() {
       var area = videoArea(), placed = [];
+      counts = { moved: 0, smaller: 0, grid: false };
       if (!area.w || !area.h) return;
-      Object.keys(boxes).sort(function (a, b) {
+      var ids = Object.keys(boxes).sort(function (a, b) {
         var first = boxes[a].bounds, second = boxes[b].bounds;
         return Number(second.text.length > 60) - Number(first.text.length > 60) ||
           first.y - second.y || first.x - second.x || (a < b ? -1 : 1);
-      }).forEach(function (id) {
-        var rect = layoutBox(boxes[id], area), best = null;
-        var candidates = [rect.y], gap = 2;
-        placed.forEach(function (other) {
-          if (other.x < rect.x + rect.w + gap && other.x + other.w + gap > rect.x) {
-            candidates.push(other.y - rect.h - gap, other.y + other.h + gap);
-          }
-        });
-        candidates.sort(function (a, b) { return Math.abs(a - rect.y) - Math.abs(b - rect.y); });
-        for (var i = 0; i < candidates.length; i++) {
-          var y = candidates[i];
-          if (Math.abs(y - rect.y) > area.h * .04 || y < area.y || y + rect.h > area.y + area.h + .01) continue;
-          var blocked = placed.some(function (other) {
-            return rect.x < other.x + other.w + gap && rect.x + rect.w + gap > other.x &&
-              y < other.y + other.h + gap - .01 && y + rect.h + gap > other.y + .01;
-          });
-          if (!blocked) { best = y; break; }
+      });
+      var font = Math.max(16, size * .72), small = Math.max(14, font * .80);
+      for (var i = 0; i < ids.length; i++) {
+        var box = boxes[ids[i]], width = box.bounds.w * area.w;
+        var rect = measure(box, area, font, width);
+        var best = position(rect, area, placed, true);
+        if (!best) {
+          var wide = box.bounds.text.length > 60 ? Math.max(width, area.w * .24) : width * .85;
+          rect = measure(box, area, small, wide);
+          best = position(rect, area, placed, true) || position(rect, area, placed, false);
+          if (!best) break;
+          counts.smaller++;
         }
-        rect.element.style.visibility = best === null ? "hidden" : "visible";
-        if (best !== null) {
-          rect.y = best;
-          rect.element.style.top = best + "px";
-          placed.push(rect);
-        }
+        if (rect.x !== best.x || rect.y !== best.y) counts.moved++;
+        rect.x = best.x;
+        rect.y = best.y;
+        rect.element.style.left = rect.x + "px";
+        rect.element.style.top = rect.y + "px";
+        rect.element.style.visibility = "visible";
+        placed.push(rect);
+      }
+      if (i === ids.length) return;
+      // Only an overfull scene needs a grid. Keep every box accessible and avoid
+      // layering unreadable text over another box when no free rectangle exists.
+      counts.grid = true;
+      ids.sort(function (a, b) { return boxes[a].bounds.y - boxes[b].bounds.y || boxes[a].bounds.x - boxes[b].bounds.x; });
+      var columns = Math.min(ids.length, Math.max(1, Math.ceil(Math.sqrt(ids.length * area.w / area.h))));
+      var cellWidth = area.w / columns, cellHeight = area.h / Math.ceil(ids.length / columns);
+      ids.forEach(function (id, index) {
+        var element = boxes[id].element, css = element.style;
+        element.className = "text-box " + style;
+        css.fontSize = small + "px";
+        css.width = Math.max(1, cellWidth - 2) + "px";
+        css.maxHeight = Math.max(1, cellHeight - 2) + "px";
+        css.left = area.x + (index % columns) * cellWidth + "px";
+        css.top = area.y + Math.floor(index / columns) * cellHeight + "px";
+        css.visibility = "visible";
       });
     }
+
+    this.diagnostics = function () { return counts; };
 
     function valid(block) {
       return block && typeof block.id === "string" && block.id.length <= 40 &&
@@ -125,6 +171,6 @@
       layout();
     };
     this.layout = layout;
-    this.clear = function () { Object.keys(boxes).forEach(remove); };
+    this.clear = function () { Object.keys(boxes).forEach(remove); counts = { moved: 0, smaller: 0, grid: false }; };
   };
 }(window));

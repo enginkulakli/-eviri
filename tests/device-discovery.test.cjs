@@ -9,7 +9,7 @@ const serverId = "fedcba9876543210fedcba9876543210";
 const secret = (value, role, seq) => createHmac("sha256", Buffer.from(value, "hex"))
   .update("ps5-discovery-v1|" + role + "|" + seq).digest("hex");
 
-function network({ wrongFirst = false } = {}) {
+function network({ wrongFirst = false, samsungFallback = false, handshakeDelay = 0 } = {}) {
   const settings = new Map([["tabletIp", "192.168.1.3"]]);
   const statuses = [];
   const contacts = [];
@@ -23,7 +23,11 @@ function network({ wrongFirst = false } = {}) {
     crypto: webcrypto,
     setTimeout: queue,
     clearTimeout: (id) => timers.delete(id),
-    tizen: { systeminfo: { getPropertyValue(_name, done) { done({ ipAddress: "192.168.1.2", subnetMask: "255.255.255.248" }); } } },
+    tizen: { systeminfo: { getPropertyValue(_name, done) {
+      done(samsungFallback ? {ipAddress: "192.168.1.2", subnetMask: "0.0.0.0", status: "DISCONNECTED"} :
+        {ipAddress: "192.168.1.2", subnetMask: "255.255.255.248"});
+    } } },
+    webapis: samsungFallback ? {network: {getIp: () => "192.168.1.2", getSubnetMask: () => "255.255.255.248"}} : undefined,
     WebSocket: function (url) {
       const host = new URL(url).hostname;
       contacts.push(host);
@@ -49,7 +53,7 @@ function network({ wrongFirst = false } = {}) {
       queue(() => {
         if (!closed && (host === serverAddress || (host === "192.168.1.3" && serverKey))) this.onopen();
         else if (!closed) this.onerror();
-      });
+      }, handshakeDelay);
     },
   };
   const context = vm.createContext({window: root});
@@ -101,4 +105,14 @@ test("rejects a peer without the pairing code and leaves manual connection avail
   assert.equal(discovery.saved(), false);
   assert.deepEqual(lan.failures, [true]);
   assert.deepEqual(lan.connections, []);
+});
+
+test("uses the configured Samsung network when SystemInfo is stale and tolerates a TCP retransmit", () => {
+  const lan = network({samsungFallback: true, handshakeDelay: 1100});
+  lan.start().search(true);
+  lan.run();
+  lan.move("192.168.1.5");
+  lan.start().search(false);
+  lan.run();
+  assert.deepEqual(lan.connections, [["192.168.1.3", 8787], ["192.168.1.5", 8787]]);
 });

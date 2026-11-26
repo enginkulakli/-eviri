@@ -3,19 +3,22 @@
   var socket = null, hdmiSources = [], subtitleTimer = null;
   var retryTimer = null, retryDelay = 1000, endpoint = null;
   var editing = null, discovery = null, automatic = false, enrolling = false;
+  var userSettings = false, backDown = false, connectionTimer = null, heartbeatTimer = null;
+  var heartbeatSupported = false, lastReply = 0;
   var preferences = { subtitleSize: "34", subtitlePosition: "7", subtitleStyle: "outline", overlayFit: "contain" };
   function byId(id) { return document.getElementById(id); }
   function status(message) { byId("platformStatus").textContent = message; }
   function connection(message) { byId("connectionStatus").textContent = message; }
 
-  function registerRemoteKeys() {
-    try {
-      if (window.tizen && tizen.tvinputdevice) {
-        ["Return", "Exit"].forEach(function (key) {
-          try { tizen.tvinputdevice.registerKey(key); } catch (_) {}
-        });
-      }
-    } catch (_) {}
+  // Back and the navigation keys are mandatory Samsung remote keys.
+  function isBack(event) {
+    var code = event.keyCode || event.which;
+    return event.key === "Back" || event.key === "Return" || event.key === "Escape" || code === 10009 || code === 27;
+  }
+
+  function consume(event) {
+    event.preventDefault();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
   }
 
   function focusableItems() {
@@ -37,6 +40,12 @@
     var panel = byId("setup"), button = byId("showPanel");
     if (editing) finishEdit(editing);
     if (open) {
+      var details = byId("overlayStatus");
+      if (details && overlay && overlay.diagnostics) {
+        var stats = overlay.diagnostics();
+        details.textContent = stats.grid ? "Tam ekran · yoğun sahne düzeni" :
+          stats.moved || stats.smaller ? "Tam ekran · " + stats.moved + " kutu kaydırıldı, " + stats.smaller + " kutu küçültüldü." : "";
+      }
       panel.classList.remove("hidden");
       button.classList.remove("hidden");
       byId("hdmiSelect").focus();
@@ -46,13 +55,28 @@
     }
   }
 
+  function toggleSettings(open) {
+    userSettings = open;
+    showSettings(open);
+  }
+
   function handleRemote(event) {
     var key = event.key || "";
     var code = event.keyCode || event.which;
-    var back = key === "Back" || key === "Escape" || code === 10009 || code === 27;
+    if (isBack(event)) {
+      consume(event);
+      if (backDown || event.repeat) return;
+      backDown = true;
+      if (editing) {
+        var field = editing;
+        finishEdit(field);
+        field.focus();
+      } else toggleSettings(byId("setup").classList.contains("hidden"));
+      return;
+    }
     var confirm = key === "Enter" || code === 13;
     if (editing) {
-      if (back || confirm || code === 65376 || code === 65385) {
+      if (confirm || code === 65376 || code === 65385) {
         var input = editing;
         finishEdit(input);
         input.focus();
@@ -96,9 +120,6 @@
         active.focus();
         event.preventDefault();
       }
-    } else if (back || key === "Return") {
-      showSettings(byId("setup").classList.contains("hidden"));
-      event.preventDefault();
     }
   }
 
@@ -162,9 +183,26 @@
     if (retryTimer !== null || (!endpoint && !automatic) || document.hidden || enrolling) return;
     retryTimer = window.setTimeout(function () {
       retryTimer = null;
-      if (!automatic || !discovery || !discovery.search(false)) openTabletSocket();
+      if (automatic) searchSavedDevice();
+      else openTabletSocket();
     }, retryDelay);
     retryDelay = Math.min(retryDelay * 2, 15000);
+  }
+
+  function searchSavedDevice() {
+    if (!discovery || !discovery.search(false)) {
+      connection("Kayıtlı cihaz aranamadı. IP ve portu elle girebilirsiniz.");
+      return false;
+    }
+    return true;
+  }
+
+  function connectionFailed(current, message) {
+    if (socket !== current) return;
+    closeTabletSocket();
+    if (automatic) endpoint = null;
+    connection(message);
+    retryConnection();
   }
 
   function openTabletSocket() {
@@ -174,43 +212,57 @@
       current = new WebSocket(endpoint);
     } catch (_) {
       connection("WebSocket adresi açılamadı.");
+      retryConnection();
       return;
     }
     socket = current;
     connection("Bağlanıyor…");
+    connectionTimer = window.setTimeout(function () {
+      connectionFailed(current, "Bağlantı zaman aşımına uğradı. Yeniden deneniyor…");
+    }, 5000);
+    function heartbeat() {
+      if (socket !== current) return;
+      if (heartbeatSupported && Date.now() - lastReply >= 15000) {
+        connectionFailed(current, "Cihaz yanıt vermiyor. Yeniden aranıyor…");
+        return;
+      }
+      try { current.send('{"type":"ping"}'); }
+      catch (_) { connectionFailed(current, "Bağlantı kesildi. Yeniden deneniyor…"); return; }
+      heartbeatTimer = window.setTimeout(heartbeat, 5000);
+    }
     current.onopen = function () {
       if (socket !== current) return;
+      window.clearTimeout(connectionTimer);
       retryDelay = 1000;
       connection("Cihaza bağlandı.");
-      showSettings(false);
-      // Legacy tablet servers ignore incoming messages.
-      current.send('{"type":"hello","subtitleVersion":2}');
-      current.send('{"type":"hello","subtitleVersion":3}');
+      if (!userSettings) showSettings(false);
+      try {
+        current.send('{"type":"hello","subtitleVersion":2}');
+        current.send('{"type":"hello","subtitleVersion":3}');
+      } catch (_) { connectionFailed(current, "Bağlantı kesildi. Yeniden deneniyor…"); return; }
+      heartbeatTimer = window.setTimeout(heartbeat, 5000);
     };
     current.onmessage = function (event) {
       if (socket !== current || document.hidden) return;
-      try { handleSubtitle(JSON.parse(event.data)); } catch (_) {}
+      try {
+        var data = JSON.parse(event.data);
+        if (data && data.type === "pong") heartbeatSupported = true;
+        lastReply = Date.now();
+        handleSubtitle(data);
+      } catch (_) {}
     };
-    current.onerror = function () {
-      if (socket !== current) return;
-      clearSubtitle();
-      overlay.clear();
-      connection("Bağlantı hatası. Tablet uygulamasını ve portu kontrol et.");
-      try { current.close(); } catch (_) {}
-    };
-    current.onclose = function () {
-      if (socket !== current) return;
-      socket = null;
-      clearSubtitle();
-      overlay.clear();
-      connection("Bağlantı kesildi. Yeniden bağlanılıyor…");
-      retryConnection();
+    current.onerror = current.onclose = function () {
+      connectionFailed(current, "Bağlantı kesildi. Yeniden deneniyor…");
     };
   }
 
   function closeTabletSocket() {
     window.clearTimeout(retryTimer);
+    window.clearTimeout(connectionTimer);
+    window.clearTimeout(heartbeatTimer);
     retryTimer = null;
+    heartbeatSupported = false;
+    lastReply = 0;
     var previous = socket;
     socket = null;
     if (previous) { try { previous.close(); } catch (_) {} }
@@ -235,9 +287,8 @@
     }
     if (port < 1024 || port > 65535 || port % 1 !== 0) { connection("Port 1024–65535 arasında olmalı."); return; }
     if (manual) {
-      automatic = false;
+      automatic = !!(discovery && discovery.saved());
       enrolling = false;
-      savePreference("deviceDiscoveryAuto", "0");
       if (discovery) discovery.stop();
       byId("discoveryStatus").textContent = "";
     }
@@ -262,8 +313,10 @@
   function init() {
     overlay = new window.Ps5TextOverlay(byId("textOverlay"), window);
     window.addEventListener("resize", function () { overlay.layout(); });
-    registerRemoteKeys();
     document.addEventListener("keydown", handleRemote, true);
+    document.addEventListener("keyup", function (event) {
+      if (isBack(event)) { backDown = false; consume(event); }
+    }, true);
     byId("startHdmi").addEventListener("click", startHdmi);
     byId("connect").addEventListener("click", function () { connectTablet(true); });
     if (window.Ps5DeviceDiscovery) {
@@ -271,11 +324,16 @@
         read: function (key) { return readPreference(key, ""); },
         write: savePreference,
         status: function (message) { byId("discoveryStatus").textContent = message; },
-        failed: function () { enrolling = false; if (automatic && !socket) retryConnection(); },
+        failed: function () {
+          enrolling = false;
+          if (automatic && !socket) {
+            connection("Kayıtlı cihaz bulunamadı. Sunucuyu kontrol edin veya IP ve portu elle girin.");
+            retryConnection();
+          }
+        },
         connected: function (ip, port) {
           automatic = true;
           enrolling = false;
-          savePreference("deviceDiscoveryAuto", "1");
           byId("discoveryStatus").textContent = "Cihaz eşleştirildi.";
           byId("tabletIp").value = ip;
           byId("tabletPort").value = String(port);
@@ -283,14 +341,27 @@
         }
       });
       byId("discoverDevice").addEventListener("click", function () {
+        if (discovery.saved()) {
+          automatic = true;
+          closeTabletSocket();
+          endpoint = null;
+          searchSavedDevice();
+        } else beginPairing();
+      });
+      var pairButton = byId("pairDevice");
+      if (pairButton) pairButton.addEventListener("click", beginPairing);
+      function beginPairing() {
         window.clearTimeout(retryTimer);
         retryTimer = null;
-        enrolling = discovery.search(true);
-        if (!enrolling && automatic && !socket) retryConnection();
-      });
+        enrolling = true;
+        if (!discovery.search(true)) {
+          enrolling = false;
+          if (automatic && !socket) retryConnection();
+        }
+      }
     }
-    byId("hidePanel").addEventListener("click", function () { showSettings(false); });
-    byId("showPanel").addEventListener("click", function () { showSettings(true); });
+    byId("hidePanel").addEventListener("click", function () { toggleSettings(false); });
+    byId("showPanel").addEventListener("click", function () { toggleSettings(true); });
     ["tabletIp", "tabletPort"].forEach(function (id) {
       var input = byId(id);
       input.readOnly = true;
@@ -310,8 +381,8 @@
       byId("tabletIp").value = savedIp;
       byId("tabletPort").value = readPreference("tabletPort", "8787");
     }
-    automatic = !!(discovery && discovery.saved() && readPreference("deviceDiscoveryAuto", "1") === "1");
-    if (automatic) discovery.search(false);
+    automatic = !!(discovery && discovery.saved());
+    if (automatic) searchSavedDevice();
     else if (savedIp) connectTablet(false);
     applyAppearance();
     loadSources();
@@ -319,13 +390,14 @@
   }
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
+      backDown = false;
       enrolling = false;
       if (discovery) discovery.stop();
       closeTabletSocket();
       return;
     }
     if (!hdmiSources.length) loadSources();
-    if (automatic && discovery) discovery.search(false);
+    if (automatic) searchSavedDevice();
     else openTabletSocket();
   });
   window.addEventListener("load", init);
