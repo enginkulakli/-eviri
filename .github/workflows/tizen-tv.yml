@@ -24,6 +24,26 @@ jobs:
           cd Ps5AltyaziTV
           zip -r ../Ps5AltyaziTV.wgt .
           zip -r ../Ps5AltyaziTV-source.zip .
+      - name: Verify WGT resources and Tizen 4 identity
+        run: |
+          unzip -tq Ps5AltyaziTV.wgt
+          python3 - <<'PY'
+          from xml.etree import ElementTree
+          from zipfile import ZipFile
+
+          with ZipFile("Ps5AltyaziTV.wgt") as package:
+              config = ElementTree.fromstring(package.read("config.xml"))
+              tizen = "{http://tizen.org/ns/widgets}"
+              widget = "{http://www.w3.org/ns/widgets}"
+              app = config.find(tizen + "application")
+              assert (app.get("id"), app.get("package"), app.get("required_version")) == (
+                  "Ps5AltYazi.Ps5AltyaziTV", "Ps5AltYazi", "4.0",
+              )
+              assert config.find(tizen + "profile").get("name") == "tv-samsung"
+              assert config.find(widget + "content").get("src") in package.namelist()
+              assert package.read(config.find(widget + "icon").get("src")).startswith(bytes.fromhex("89504e470d0a1a0a"))
+              assert "js/device-discovery.js" in package.namelist()
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: Ps5AltyaziTV-WGT
