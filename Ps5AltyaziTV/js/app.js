@@ -2,7 +2,7 @@
   "use strict";
   var socket = null, hdmiSources = [], subtitleTimer = null;
   var retryTimer = null, retryDelay = 1000, endpoint = null;
-  var editing = null;
+  var editing = null, discovery = null, automatic = false, enrolling = false;
   var preferences = { subtitleSize: "34", subtitlePosition: "7", subtitleStyle: "outline", overlayFit: "contain" };
   function byId(id) { return document.getElementById(id); }
   function status(message) { byId("platformStatus").textContent = message; }
@@ -159,10 +159,10 @@
   }
 
   function retryConnection() {
-    if (retryTimer !== null || !endpoint || document.hidden) return;
+    if (retryTimer !== null || (!endpoint && !automatic) || document.hidden || enrolling) return;
     retryTimer = window.setTimeout(function () {
       retryTimer = null;
-      openTabletSocket();
+      if (!automatic || !discovery || !discovery.search(false)) openTabletSocket();
     }, retryDelay);
     retryDelay = Math.min(retryDelay * 2, 15000);
   }
@@ -226,7 +226,7 @@
     try { return window.localStorage.getItem(key) || fallback; } catch (_) { return fallback; }
   }
 
-  function connectTablet() {
+  function connectTablet(manual) {
     var ip = byId("tabletIp").value.trim(), port = Number(byId("tabletPort").value.trim() || "8787");
     var parts = ip.split(".");
     if (parts.length !== 4 || !parts.every(function (part) { return /^\d{1,3}$/.test(part) && Number(part) <= 255; })) {
@@ -234,6 +234,13 @@
       return;
     }
     if (port < 1024 || port > 65535 || port % 1 !== 0) { connection("Port 1024–65535 arasında olmalı."); return; }
+    if (manual) {
+      automatic = false;
+      enrolling = false;
+      savePreference("deviceDiscoveryAuto", "0");
+      if (discovery) discovery.stop();
+      byId("discoveryStatus").textContent = "";
+    }
     savePreference("tabletIp", ip);
     savePreference("tabletPort", String(port));
     closeTabletSocket();
@@ -258,7 +265,30 @@
     registerRemoteKeys();
     document.addEventListener("keydown", handleRemote, true);
     byId("startHdmi").addEventListener("click", startHdmi);
-    byId("connect").addEventListener("click", connectTablet);
+    byId("connect").addEventListener("click", function () { connectTablet(true); });
+    if (window.Ps5DeviceDiscovery) {
+      discovery = new window.Ps5DeviceDiscovery({
+        read: function (key) { return readPreference(key, ""); },
+        write: savePreference,
+        status: function (message) { byId("discoveryStatus").textContent = message; },
+        failed: function () { enrolling = false; if (automatic && !socket) retryConnection(); },
+        connected: function (ip, port) {
+          automatic = true;
+          enrolling = false;
+          savePreference("deviceDiscoveryAuto", "1");
+          byId("discoveryStatus").textContent = "Cihaz eşleştirildi.";
+          byId("tabletIp").value = ip;
+          byId("tabletPort").value = String(port);
+          connectTablet(false);
+        }
+      });
+      byId("discoverDevice").addEventListener("click", function () {
+        window.clearTimeout(retryTimer);
+        retryTimer = null;
+        enrolling = discovery.search(true);
+        if (!enrolling && automatic && !socket) retryConnection();
+      });
+    }
     byId("hidePanel").addEventListener("click", function () { showSettings(false); });
     byId("showPanel").addEventListener("click", function () { showSettings(true); });
     ["tabletIp", "tabletPort"].forEach(function (id) {
@@ -279,16 +309,24 @@
     if (savedIp) {
       byId("tabletIp").value = savedIp;
       byId("tabletPort").value = readPreference("tabletPort", "8787");
-      connectTablet();
     }
+    automatic = !!(discovery && discovery.saved() && readPreference("deviceDiscoveryAuto", "1") === "1");
+    if (automatic) discovery.search(false);
+    else if (savedIp) connectTablet(false);
     applyAppearance();
     loadSources();
     window.setTimeout(function () { if (!byId("setup").classList.contains("hidden")) byId("hdmiSelect").focus(); }, 300);
   }
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) { closeTabletSocket(); return; }
+    if (document.hidden) {
+      enrolling = false;
+      if (discovery) discovery.stop();
+      closeTabletSocket();
+      return;
+    }
     if (!hdmiSources.length) loadSources();
-    openTabletSocket();
+    if (automatic && discovery) discovery.search(false);
+    else openTabletSocket();
   });
   window.addEventListener("load", init);
 }());
