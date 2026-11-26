@@ -35,6 +35,7 @@ jobs:
               config = ElementTree.fromstring(package.read("config.xml"))
               tizen = "{http://tizen.org/ns/widgets}"
               widget = "{http://www.w3.org/ns/widgets}"
+              assert config.get("version") == "3.2.0"
               app = config.find(tizen + "application")
               assert (app.get("id"), app.get("package"), app.get("required_version")) == (
                   "Ps5AltYazi.Ps5AltyaziTV", "Ps5AltYazi", "4.0",
