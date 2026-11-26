@@ -166,3 +166,18 @@ test("remote shows settings without opening the keyboard and Back closes editing
   press(10009);
   assert(app.node("setup").classList.contains("hidden"));
 });
+
+test("relayout uses real element height and avoids overlapping phone captions", () => {
+  const app = setup();
+  const layer = app.node("textOverlay");
+  app.receive(message([block("a", .35, .4, 800), block("b", .36, .41, 1200)]));
+  const [a, b] = layer.children;
+  assert.equal(a.style.visibility, "visible");
+  assert.equal(b.style.visibility, "visible");
+  const topA = parseFloat(a.style.top), topB = parseFloat(b.style.top);
+  assert(topB >= topA + a.offsetHeight || topA >= topB + b.offsetHeight);
+  app.receive(message([block("a", .35, .4, 1200), block("b", .36, .41, 1200)]));
+  assert.equal(layer.children[0], a);
+  assert.equal(layer.children[1], b);
+  assert.equal(parseFloat(b.style.top), topB);
+});

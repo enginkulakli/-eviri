@@ -29,7 +29,9 @@
       element.style.width = width + "px";
       element.style.maxHeight = area.h + "px";
       element.style.left = clamp(centerX - width / 2, area.x, area.x + area.w - width) + "px";
-      element.style.top = clamp(top, area.y, area.y + area.h - element.offsetHeight) + "px";
+      var height = element.offsetHeight;
+      return { element: element, x: parseFloat(element.style.left), y: clamp(top, area.y, area.y + area.h - height),
+        w: width, h: height };
     }
 
     function videoArea() {
@@ -44,8 +46,37 @@
     }
 
     function layout() {
-      var area = videoArea();
-      Object.keys(boxes).forEach(function (id) { layoutBox(boxes[id], area); });
+      var area = videoArea(), placed = [];
+      if (!area.w || !area.h) return;
+      Object.keys(boxes).sort(function (a, b) {
+        var first = boxes[a].bounds, second = boxes[b].bounds;
+        return Number(second.text.length > 60) - Number(first.text.length > 60) ||
+          first.y - second.y || first.x - second.x || (a < b ? -1 : 1);
+      }).forEach(function (id) {
+        var rect = layoutBox(boxes[id], area), best = null;
+        var candidates = [rect.y], gap = 2;
+        placed.forEach(function (other) {
+          if (other.x < rect.x + rect.w + gap && other.x + other.w + gap > rect.x) {
+            candidates.push(other.y - rect.h - gap, other.y + other.h + gap);
+          }
+        });
+        candidates.sort(function (a, b) { return Math.abs(a - rect.y) - Math.abs(b - rect.y); });
+        for (var i = 0; i < candidates.length; i++) {
+          var y = candidates[i];
+          if (Math.abs(y - rect.y) > area.h * .04 || y < area.y || y + rect.h > area.y + area.h + .01) continue;
+          var blocked = placed.some(function (other) {
+            return rect.x < other.x + other.w + gap && rect.x + rect.w + gap > other.x &&
+              y < other.y + other.h + gap - .01 && y + rect.h + gap > other.y + .01;
+          });
+          if (!blocked) { best = y; break; }
+        }
+        rect.element.style.visibility = best === null ? "hidden" : "visible";
+        if (best !== null) {
+          rect.y = best;
+          rect.element.style.top = best + "px";
+          placed.push(rect);
+        }
+      });
     }
 
     function valid(block) {
@@ -63,7 +94,7 @@
       var resized = frameWidth !== message.frameWidth || frameHeight !== message.frameHeight;
       frameWidth = message.frameWidth;
       frameHeight = message.frameHeight;
-      var seen = Object.create(null), area = videoArea();
+      var seen = Object.create(null), needsLayout = resized;
       message.blocks.forEach(function (block) {
         var box = boxes[block.id];
         var changed = !box || resized || box.bounds.x !== block.x || box.bounds.y !== block.y ||
@@ -78,12 +109,13 @@
           changed = true;
         }
         box.bounds = block;
-        if (changed) layoutBox(box, area);
+        if (changed) needsLayout = true;
         seen[block.id] = true;
         clock.clearTimeout(box.timer);
-        box.timer = clock.setTimeout(function () { remove(block.id); }, clamp(block.ttlMs, 1, 15000));
+        box.timer = clock.setTimeout(function () { remove(block.id); layout(); }, clamp(block.ttlMs, 1, 15000));
       });
-      Object.keys(boxes).forEach(function (id) { if (!seen[id]) remove(id); });
+      Object.keys(boxes).forEach(function (id) { if (!seen[id]) { remove(id); needsLayout = true; } });
+      if (needsLayout) layout();
       return message.blocks.length > 0;
     };
     this.appearance = function (fontSize, appearance, mode) {
