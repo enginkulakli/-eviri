@@ -15,18 +15,23 @@ function setup() {
   let now = 0;
   let timerId = 0;
   const node = (id) => {
+    const classes = new Set();
     if (!nodes.has(id)) nodes.set(id, {
+      classList: { add: (value) => classes.add(value), remove: (value) => classes.delete(value), contains: (value) => classes.has(value) },
+      tagName: id === "tabletIp" || id === "tabletPort" ? "INPUT" : "BUTTON", offsetWidth: 100,
       textContent: "", value: "", style: {}, ownerDocument: document, offsetHeight: 28,
       clientWidth: 1920, clientHeight: 1080, children: [],
       appendChild(child) { this.children.push(child); if (!this.value && child.value) this.value = child.value; },
       removeChild(child) { this.children = this.children.filter((item) => item !== child); },
       addEventListener(event, callback) { callbacks.set(id + ":" + event, callback); },
-      focus() {},
+      focus() { document.activeElement = this; },
+      blur() { document.activeElement = null; const event = callbacks.get(id + ":blur"); if (event) event(); },
     });
     return nodes.get(id);
   };
   const document = {
     hidden: false, getElementById: node,
+    querySelectorAll: () => (node("setup").classList.contains("hidden") ? [] : ["hdmiSelect", "tabletIp", "tabletPort", "connect"].map(node)),
     createElement: () => ({ textContent: "", style: {}, offsetHeight: 28 }),
     addEventListener: (event, callback) => callbacks.set(event, callback),
   };
@@ -137,4 +142,27 @@ test("maps source aspect ratio, fits edges, and keeps boxes on a resize", () => 
   app.document.hidden = true;
   app.callbacks.get("visibilitychange")();
   assert.equal(layer.children.length, 0);
+});
+
+test("remote shows settings without opening the keyboard and Back closes editing first", () => {
+  const app = setup();
+  const press = (keyCode) => app.callbacks.get("keydown")({keyCode, preventDefault() {}});
+  assert(app.node("showPanel").classList.contains("hidden"));
+  press(10009);
+  assert.equal(app.document.activeElement, app.node("hdmiSelect"));
+  press(40);
+  assert.equal(app.document.activeElement, app.node("tabletIp"));
+  assert.equal(app.node("tabletIp").readOnly, true);
+  press(13);
+  assert.equal(app.node("tabletIp").readOnly, false);
+  press(40);
+  assert.equal(app.document.activeElement, app.node("tabletIp"));
+  press(10009);
+  assert.equal(app.node("tabletIp").readOnly, true);
+  assert.equal(app.node("setup").classList.contains("hidden"), false);
+  press(40);
+  assert.equal(app.document.activeElement, app.node("tabletPort"));
+  assert.equal(app.node("tabletPort").readOnly, true);
+  press(10009);
+  assert(app.node("setup").classList.contains("hidden"));
 });

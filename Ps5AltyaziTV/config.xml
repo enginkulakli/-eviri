@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://ps5altyazi.local/Ps5AltyaziTV" version="2.0.0" viewmodes="maximized">
   <name>PS5 Altyazı TV</name><content src="index.html"/>
+  <icon src="icon.png"/>
   <description>PS5 HDMI görüntüsünü TVWindow ile gösterir ve çevrilen altyazıyı üst katmanda sunar.</description>
   <feature name="http://tizen.org/feature/screen.size.normal"/>
   <feature name="http://tizen.org/feature/tv.pip"/>

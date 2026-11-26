@@ -2,6 +2,7 @@
   "use strict";
   var socket = null, hdmiSources = [], subtitleTimer = null;
   var retryTimer = null, retryDelay = 1000, endpoint = null;
+  var editing = null;
   var preferences = { subtitleSize: "34", subtitlePosition: "7", subtitleStyle: "outline", overlayFit: "contain" };
   function byId(id) { return document.getElementById(id); }
   function status(message) { byId("platformStatus").textContent = message; }
@@ -25,9 +26,40 @@
     });
   }
 
+  function finishEdit(input) {
+    if (editing !== input) return;
+    editing = null;
+    input.readOnly = true;
+    input.blur();
+  }
+
+  function showSettings(open) {
+    var panel = byId("setup"), button = byId("showPanel");
+    if (editing) finishEdit(editing);
+    if (open) {
+      panel.classList.remove("hidden");
+      button.classList.remove("hidden");
+      byId("hdmiSelect").focus();
+    } else {
+      panel.classList.add("hidden");
+      button.classList.add("hidden");
+    }
+  }
+
   function handleRemote(event) {
     var key = event.key || "";
     var code = event.keyCode || event.which;
+    var back = key === "Back" || key === "Escape" || code === 10009 || code === 27;
+    var confirm = key === "Enter" || code === 13;
+    if (editing) {
+      if (back || confirm || code === 65376 || code === 65385) {
+        var input = editing;
+        finishEdit(input);
+        input.focus();
+        event.preventDefault();
+      }
+      return;
+    }
     // Use left and right to change a selection and up and down to move focus.
     if (document.activeElement && document.activeElement.tagName === "SELECT" && (code === 37 || code === 39)) {
       var select = document.activeElement;
@@ -52,20 +84,20 @@
       if (indexUp < 0) indexUp = 0;
       itemsUp[(indexUp - 1 + itemsUp.length) % itemsUp.length].focus();
       event.preventDefault();
-    } else if (key === "Enter" || key === "Return" || code === 13) {
+    } else if (confirm) {
       var active = document.activeElement;
       if (active && active.tagName === "BUTTON") {
         active.click();
         event.preventDefault();
+      } else if (active && (active === byId("tabletIp") || active === byId("tabletPort"))) {
+        active.blur();
+        editing = active;
+        active.readOnly = false;
+        active.focus();
+        event.preventDefault();
       }
-    } else if (key === "Back" || key === "Escape" || code === 10009 || code === 27) {
-      if (!byId("setup").classList.contains("hidden")) {
-        byId("setup").classList.add("hidden");
-        byId("showPanel").focus();
-      } else {
-        byId("setup").classList.remove("hidden");
-        byId("hdmiSelect").focus();
-      }
+    } else if (back || key === "Return") {
+      showSettings(byId("setup").classList.contains("hidden"));
       event.preventDefault();
     }
   }
@@ -149,7 +181,8 @@
     current.onopen = function () {
       if (socket !== current) return;
       retryDelay = 1000;
-      connection("Tablete bağlandı.");
+      connection("Cihaza bağlandı.");
+      showSettings(false);
       // Legacy tablet servers ignore incoming messages.
       current.send('{"type":"hello","subtitleVersion":2}');
       current.send('{"type":"hello","subtitleVersion":3}');
@@ -226,8 +259,13 @@
     document.addEventListener("keydown", handleRemote, true);
     byId("startHdmi").addEventListener("click", startHdmi);
     byId("connect").addEventListener("click", connectTablet);
-    byId("hidePanel").addEventListener("click", function () { byId("setup").classList.add("hidden"); byId("showPanel").focus(); });
-    byId("showPanel").addEventListener("click", function () { byId("setup").classList.remove("hidden"); byId("hdmiSelect").focus(); });
+    byId("hidePanel").addEventListener("click", function () { showSettings(false); });
+    byId("showPanel").addEventListener("click", function () { showSettings(true); });
+    ["tabletIp", "tabletPort"].forEach(function (id) {
+      var input = byId(id);
+      input.readOnly = true;
+      input.addEventListener("blur", function () { if (editing === input) { editing = null; input.readOnly = true; } });
+    });
     Object.keys(preferences).forEach(function (key) {
       var select = byId(key);
       select.value = readPreference(key, preferences[key]);
@@ -245,7 +283,7 @@
     }
     applyAppearance();
     loadSources();
-    window.setTimeout(function () { byId("hdmiSelect").focus(); }, 300);
+    window.setTimeout(function () { if (!byId("setup").classList.contains("hidden")) byId("hdmiSelect").focus(); }, 300);
   }
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) { closeTabletSocket(); return; }
